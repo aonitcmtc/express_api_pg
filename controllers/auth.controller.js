@@ -3,6 +3,8 @@ const bcrypt = require("bcryptjs");
 const userService = require("../services/user.service");
 const tokenService = require("../services/token.service");
 
+const Minio = require('minio');
+
 const generateAccessToken = (user) =>
   jwt.sign(user, process.env.JWT_SECRET, {
     expiresIn: process.env.ACCESS_TOKEN_EXPIRE,
@@ -34,13 +36,49 @@ exports.login = async (req, res) => {
   if (!match)
     return res.status(401).json({ message: "Invalid password" });
 
-  const payload = { id: user.member_id, email: user.email };
+  // ตั้งค่า MinIO client
+  const minioClient = new Minio.Client({
+    endPoint: 'drive.myexpress-api.click',        // หรือ IP Server
+    // port: 9000,
+    useSSL: false,
+    accessKey: 'minioadmin',
+    secretKey: 'minioadmin121'
+  });
+
+  const BUCKET = 'userspublish'; //userspublish/memberprofiles%2F
+  const fileName = 'memberprofiles/'+user.img_profile; //Preview - memberprofiles/devprofiles.PNG
+
+  let url_profile = [];
+  try {
+      url_profile = await minioClient.presignedGetObject(
+      BUCKET,
+      fileName,
+      // 60 * 5 // 5 นาที
+    );
+
+    // res.json({ url_profile });
+  } catch (err) {
+    // res.status(500).json({ error: err.message });
+  }
+  
+const payload = { id: user.member_id, email: user.email };
+  const user_data = { 
+    id: user.member_id, 
+    email: user.email, 
+    name: user.first_name+" "+user.last_name,
+    profile: url_profile, 
+    sex: user.sex, 
+    membergroup: user.member_group, 
+    status: user.status
+  };
 
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
 
   const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
+  // expiresAt.setDate(expiresAt.getDate() + 7);
+  expiresAt.setTime(expiresAt.getTime() + (15 * 60 * 1000)); // 15 นาที
+  // expiresAt.setTime(expiresAt.getTime() + (60 * 60 * 1000)); // 60 นาที
 
   await tokenService.saveRefreshToken(
     user.member_id,
@@ -48,7 +86,7 @@ exports.login = async (req, res) => {
     expiresAt
   );
 
-  res.json({ accessToken, refreshToken });
+  res.json({ accessToken, refreshToken, user_data });
 };
 
 exports.refreshToken = async (req, res) => {
