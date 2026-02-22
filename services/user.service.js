@@ -14,3 +14,7 @@ exports.findByEmail = (email) => {
 exports.findAll = () => {
   return db.query("SELECT member_id, first_name, email FROM dev");
 };
+
+exports.findByStatus = () => {
+  return db.query("SELECT count(*) FROM dev WHERE status =$1",[1]);
+};

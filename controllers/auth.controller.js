@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const userService = require("../services/user.service");
 const tokenService = require("../services/token.service");
 
-const Minio = require('minio');
+const Minio = require('minio'); // cloud images
 
 const generateAccessToken = (user) =>
   jwt.sign(user, process.env.JWT_SECRET, {
@@ -117,4 +117,41 @@ exports.logout = async (req, res) => {
   const { refreshToken } = req.body;
   await tokenService.deleteRefreshToken(refreshToken);
   res.json({ message: "Logged out" });
+};
+
+exports.getToken = async (req, res) => {
+  const { apikey } = req.body;
+
+  // Buffer.from(apikey, "utf8").toString("base64"); // encode
+  const apiencode = Buffer.from(apikey, "base64").toString("utf8"); //decode
+  const parsed = JSON.parse(apiencode);
+  const email = parsed.email;
+  const password = parsed.password;
+
+  const result = await userService.findByEmail(email);
+  if (!result.rows.length)
+    return res.status(401).json({ message: "Invalid email" });
+
+  const user = result.rows[0];
+  const match = await bcrypt.compare(password, user.password);
+  if (!match)
+    return res.status(401).json({ message: "Invalid password" });
+
+  const payload = { id: user.member_id, email: user.email };
+
+  const accessToken = generateAccessToken(payload);
+  const refreshToken = generateRefreshToken(payload);
+
+  const expiresAt = new Date();
+  // expiresAt.setTime(expiresAt.getTime() + (15 * 60 * 1000)); // 15 นาที
+  // expiresAt.setTime(expiresAt.getTime() + (60 * 60 * 1000)); // 60 นาที
+  expiresAt.setTime(expiresAt.getTime() + (24 * 60 * 60 * 1000)); // 24 ชั่วโมง
+
+  await tokenService.saveRefreshToken(
+    user.member_id,
+    refreshToken,
+    expiresAt
+  );
+
+  res.json({ accessToken, refreshToken });
 };
