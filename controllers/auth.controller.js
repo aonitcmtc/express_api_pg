@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const userService = require("../services/user.service");
 const tokenService = require("../services/token.service");
+const logadminService = require("../services/logadmin.service");
 
 const Minio = require('minio'); // cloud images
 
@@ -25,7 +26,8 @@ exports.register = async (req, res) => {
 };
 
 exports.login = async (req, res) => {
-  const { email, password } = req.body;
+  // const { email, password } = req.body;
+  const { email, password, ip, agent, visited_at } = req.body;
 
   const result = await userService.findByEmail(email);
   if (!result.rows.length)
@@ -61,7 +63,7 @@ exports.login = async (req, res) => {
     // res.status(500).json({ error: err.message });
   }
   
-const payload = { id: user.member_id, email: user.email };
+  const payload = { id: user.member_id, email: user.email };
   const user_data = { 
     id: user.member_id, 
     email: user.email, 
@@ -86,7 +88,10 @@ const payload = { id: user.member_id, email: user.email };
     expiresAt
   );
 
-  res.json({ accessToken, refreshToken, user_data });
+  // id, visited_at, ip, agent
+  const logLogin = await logadminService.addLogActionLogin(user.member_id, visited_at, ip, agent);
+
+  res.json({ accessToken, refreshToken, user_data, logLogin });
 };
 
 exports.refreshToken = async (req, res) => {
